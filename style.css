@@ -217,6 +217,14 @@ body {
 }
 .btn-ghost:hover { background: var(--accent-soft); }
 
+.btn-danger {
+  background: none;
+  color: var(--danger);
+  border: 1.5px solid var(--danger);
+}
+.btn-danger:hover { background: #f4ddd6; }
+.btn-danger:disabled { border-color: var(--line); color: var(--mono-note); }
+
 .status-msg {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 13px;
