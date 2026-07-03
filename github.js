@@ -98,3 +98,18 @@ async function getFileMeta(cfg, path, token) {
   if (!res.ok) throw new Error(`Erro ao verificar arquivo (${res.status})`);
   return res.json();
 }
+
+// Exclui um arquivo de post via API do GitHub (precisa de token e do sha atual)
+async function deletePostFile(cfg, token, path, sha, message) {
+  const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`;
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: { ...apiHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, sha, branch: cfg.branch })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Erro ao excluir (${res.status})`);
+  }
+  return res.json();
+}
