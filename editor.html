@@ -45,6 +45,7 @@
 
     <button class="btn" id="publish-btn">Publicar</button>
     <button class="btn btn-ghost" id="preview-btn" type="button">Pré-visualizar</button>
+    <button class="btn btn-danger" id="delete-btn" type="button" style="display:none">Excluir post</button>
 
     <div id="status"></div>
   </div>
@@ -99,12 +100,37 @@
         existingDate = parsed.date;
         updateCounter();
         publishBtn.textContent = 'Salvar alterações';
+        document.getElementById('delete-btn').style.display = 'inline-block';
         statusEl.innerHTML = '';
       } catch (e) {
         showStatus(`Erro ao carregar post: ${e.message}`, false);
       }
     }
     loadForEdit();
+
+    document.getElementById('delete-btn').addEventListener('click', async () => {
+      const token = tokenEl.value.trim();
+      if (!token) return showStatus('Informe seu token do GitHub.', false);
+      if (!existingSha || !editingPath) return showStatus('Não há post carregado para excluir.', false);
+
+      const confirmed = confirm(`Excluir o post "${titleEl.value || editingPath}"? Essa ação não pode ser desfeita.`);
+      if (!confirmed) return;
+
+      const deleteBtn = document.getElementById('delete-btn');
+      deleteBtn.disabled = true;
+      publishBtn.disabled = true;
+      showStatus('Excluindo…', true);
+
+      try {
+        await deletePostFile(BLOG_CONFIG, token, editingPath, existingSha, `Exclui post: ${titleEl.value || editingPath}`);
+        showStatus('Post excluído! Redirecionando…', true);
+        setTimeout(() => { location.href = 'index.html'; }, 700);
+      } catch (e) {
+        deleteBtn.disabled = false;
+        publishBtn.disabled = false;
+        showStatus(`Erro ao excluir: ${e.message}`, false);
+      }
+    });
 
     document.getElementById('preview-btn').addEventListener('click', () => {
       const win = window.open('', '_blank');
