@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Escrever — Meu Blog</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="site-head">
+      <a href="index.html" class="site-title">Meu Blog</a>
+      <nav class="site-nav">
+        <a href="index.html">← Todos os posts</a>
+      </nav>
+    </header>
+
+    <div class="token-box">
+      <div class="token-row">
+        <div class="field">
+          <label for="token">Token do GitHub (Personal Access Token)</label>
+          <input type="password" id="token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+        </div>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="remember">
+        <label for="remember">lembrar neste navegador (localStorage)</label>
+      </div>
+      <div class="field-hint">
+        Crie um token em github.com → Settings → Developer settings → Fine-grained tokens,
+        com permissão de leitura/escrita em "Contents" apenas para este repositório.
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="title">Título</label>
+      <input type="text" id="title" placeholder="Título do post">
+    </div>
+
+    <div class="field">
+      <label for="body">Texto (Markdown)</label>
+      <textarea id="body" placeholder="Escreva aqui em Markdown…"></textarea>
+    </div>
+    <div class="counter" id="counter">0 palavras · ~1 min de leitura</div>
+
+    <button class="btn" id="publish-btn">Publicar</button>
+    <button class="btn btn-ghost" id="preview-btn" type="button">Pré-visualizar</button>
+
+    <div id="status"></div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="github.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+  <script>
+    const tokenEl = document.getElementById('token');
+    const rememberEl = document.getElementById('remember');
+    const titleEl = document.getElementById('title');
+    const bodyEl = document.getElementById('body');
+    const counterEl = document.getElementById('counter');
+    const statusEl = document.getElementById('status');
+    const publishBtn = document.getElementById('publish-btn');
+
+    const params = new URLSearchParams(location.search);
+    const editingPath = params.get('file'); // presente quando estamos editando um post existente
+    let existingSha = null;
+    let existingDate = null;
+
+    // Restaura token salvo
+    const savedToken = localStorage.getItem('blog_gh_token');
+    if (savedToken) {
+      tokenEl.value = savedToken;
+      rememberEl.checked = true;
+    }
+
+    function updateCounter() {
+      const { words, minutes } = estimateReadingTime(bodyEl.value);
+      counterEl.textContent = `${words} palavras · ~${minutes} min de leitura`;
+    }
+    bodyEl.addEventListener('input', updateCounter);
+    updateCounter();
+
+    function showStatus(msg, ok) {
+      statusEl.innerHTML = `<div class="status-msg ${ok ? 'ok' : 'err'}">${msg}</div>`;
+    }
+
+    // Se estamos editando, carrega o conteúdo existente
+    async function loadForEdit() {
+      if (!editingPath) return;
+      showStatus('Carregando post existente…', true);
+      try {
+        const meta = await getFileMeta(BLOG_CONFIG, editingPath, tokenEl.value.trim());
+        if (!meta) throw new Error('post não encontrado');
+        existingSha = meta.sha;
+        const raw = base64ToUtf8(meta.content.replace(/\n/g, ''));
+        const parsed = parseMarkdownFile(raw);
+        titleEl.value = parsed.title;
+        bodyEl.value = parsed.body;
+        existingDate = parsed.date;
+        updateCounter();
+        publishBtn.textContent = 'Salvar alterações';
+        statusEl.innerHTML = '';
+      } catch (e) {
+        showStatus(`Erro ao carregar post: ${e.message}`, false);
+      }
+    }
+    loadForEdit();
+
+    document.getElementById('preview-btn').addEventListener('click', () => {
+      const win = window.open('', '_blank');
+      win.document.write(`
+        <html><head><title>Pré-visualização</title>
+        <link rel="stylesheet" href="${location.origin}${location.pathname.replace('editor.html','style.css')}">
+        </head><body><div class="wrap">
+        <h1 class="post-title">${titleEl.value || '(sem título)'}</h1>
+        <div class="post-body">${marked.parse(bodyEl.value)}</div>
+        </div></body></html>
+      `);
+    });
+
+    publishBtn.addEventListener('click', async () => {
+      const token = tokenEl.value.trim();
+      const title = titleEl.value.trim();
+      const body = bodyEl.value.trim();
+
+      if (!token) return showStatus('Informe seu token do GitHub.', false);
+      if (!title) return showStatus('Dê um título ao post.', false);
+      if (!body) return showStatus('O post não pode estar vazio.', false);
+
+      if (rememberEl.checked) {
+        localStorage.setItem('blog_gh_token', token);
+      } else {
+        localStorage.removeItem('blog_gh_token');
+      }
+
+      publishBtn.disabled = true;
+      showStatus(editingPath ? 'Salvando alterações…' : 'Publicando…', true);
+
+      try {
+        let path = editingPath;
+        let date = existingDate;
+
+        if (!path) {
+          // novo post: gera slug único
+          let slug = slugify(title) || 'post';
+          let candidate = `${BLOG_CONFIG.postsPath}/${slug}.md`;
+          let attempt = 0;
+          while (await getFileMeta(BLOG_CONFIG, candidate, token)) {
+            attempt++;
+            candidate = `${BLOG_CONFIG.postsPath}/${slug}-${attempt}.md`;
+          }
+          path = candidate;
+          date = new Date().toISOString();
+        }
+
+        const fileContent = buildMarkdownFile({ title, date, body });
+        const message = editingPath ? `Atualiza post: ${title}` : `Publica post: ${title}`;
+        await putPostFile(BLOG_CONFIG, token, path, fileContent, message, existingSha);
+
+        showStatus('Publicado! Redirecionando…', true);
+        setTimeout(() => {
+          location.href = `post.html?file=${encodeURIComponent(path)}`;
+        }, 700);
+      } catch (e) {
+        publishBtn.disabled = false;
+        showStatus(`Erro ao publicar: ${e.message}`, false);
+      }
+    });
+  </script>
+</body>
+</html>

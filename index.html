@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meu Blog</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="site-head">
+      <a href="index.html" class="site-title">Meu Blog</a>
+      <nav class="site-nav">
+        <a href="editor.html">+ Novo post</a>
+      </nav>
+    </header>
+
+    <div id="list"></div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="github.js"></script>
+  <script>
+    async function loadList() {
+      const listEl = document.getElementById('list');
+      listEl.innerHTML = '<div class="empty-state">carregando posts…</div>';
+
+      try {
+        const files = await fetchPostsList(BLOG_CONFIG);
+        if (files.length === 0) {
+          listEl.innerHTML = '<div class="empty-state">Nenhum post publicado ainda. <a href="editor.html">Escreva o primeiro →</a></div>';
+          return;
+        }
+
+        const posts = await Promise.all(files.map(async f => {
+          const raw = await fetchRaw(f.download_url);
+          const { title, date, body } = parseMarkdownFile(raw);
+          const excerpt = body.replace(/[#*`>_-]/g, '').slice(0, 160).trim();
+          const { minutes } = estimateReadingTime(body);
+          return { path: f.path, title, date, excerpt, minutes };
+        }));
+
+        posts.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        listEl.innerHTML = posts.map(p => `
+          <a class="entry" href="post.html?file=${encodeURIComponent(p.path)}">
+            <div class="entry-eyebrow">${formatDate(p.date)} · ~${p.minutes} min de leitura</div>
+            <div class="entry-title">${escapeHtml(p.title)}</div>
+            <div class="entry-excerpt">${escapeHtml(p.excerpt)}…</div>
+          </a>
+        `).join('');
+      } catch (e) {
+        listEl.innerHTML = `<div class="empty-state">Erro ao carregar posts: ${e.message}</div>`;
+      }
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    loadList();
+  </script>
+</body>
+</html>

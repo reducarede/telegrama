@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Post — Meu Blog</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header class="site-head">
+      <a href="index.html" class="site-title">Meu Blog</a>
+      <nav class="site-nav">
+        <a href="index.html">← Todos os posts</a>
+        <a id="edit-link" href="#" style="display:none">Editar</a>
+      </nav>
+    </header>
+
+    <article id="content">
+      <div class="empty-state">carregando…</div>
+    </article>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="github.js"></script>
+  <script>
+    async function loadPost() {
+      const params = new URLSearchParams(location.search);
+      const path = params.get('file');
+      const content = document.getElementById('content');
+
+      if (!path) {
+        content.innerHTML = '<div class="empty-state">Post não encontrado.</div>';
+        return;
+      }
+
+      try {
+        const rawUrl = `https://raw.githubusercontent.com/${BLOG_CONFIG.owner}/${BLOG_CONFIG.repo}/${BLOG_CONFIG.branch}/${path}`;
+        const raw = await fetchRaw(rawUrl);
+        const { title, date, body } = parseMarkdownFile(raw);
+
+        document.title = title + ' — Meu Blog';
+        content.innerHTML = `
+          <div class="stamp">PUBLICADO · ${formatDate(date)}</div>
+          <h1 class="post-title">${title}</h1>
+          <div class="post-body">${marked.parse(body)}</div>
+        `;
+
+        const editLink = document.getElementById('edit-link');
+        editLink.href = `editor.html?file=${encodeURIComponent(path)}`;
+        editLink.style.display = 'inline';
+      } catch (e) {
+        content.innerHTML = `<div class="empty-state">Erro ao carregar o post: ${e.message}</div>`;
+      }
+    }
+
+    loadPost();
+  </script>
+</body>
+</html>
